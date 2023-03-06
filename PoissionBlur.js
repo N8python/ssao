@@ -25,7 +25,7 @@ const PoissionBlur = {
 		}`,
     fragmentShader: /* glsl */ `
 		uniform sampler2D sceneDiffuse;
-    uniform sampler2D sceneDepth;
+    uniform highp sampler2D sceneDepth;
     uniform sampler2D tDiffuse;
     uniform sampler2D blueNoise;
     uniform mat4 projectionMatrixInv;

@@ -30,7 +30,7 @@ void main() {
     #define SAMPLES 16
     #define FSAMPLES 16.0
 uniform sampler2D sceneDiffuse;
-uniform sampler2D sceneDepth;
+uniform highp sampler2D sceneDepth;
 uniform mat4 projectionMatrixInv;
 uniform mat4 viewMatrixInv;
 uniform mat4 projMat;
@@ -176,10 +176,9 @@ void main() {
       float occluded = 0.0;
       float z = linearize_depth(texture2D(sceneDepth, vUv).x, 0.1, 1000.0);
       for(float i = 0.0; i < FSAMPLES; i++) {
-        vec3 sampleDirection = reflect(samples[int(i)], normalize(noise.rgb));
-        if (dot(normal, sampleDirection) < 0.0) {
-          sampleDirection *= -1.0;
-        }
+        vec3 sampleDirection = reflect(samples[int(i)], normalize(noise.rgb));// * sign(dot(normal, samples[int(i)]));
+       sampleDirection *= (dot(normal, sampleDirection) < 0.0 ? -1.0 : 1.0);
+
         float moveAmt = samplesR[int(mod(i + noise.a * FSAMPLES, FSAMPLES))];
         vec3 samplePos = worldPos + radius * moveAmt * sampleDirection;
         vec4 offset = projViewMat * vec4(samplePos, 1.0);
@@ -189,9 +188,9 @@ void main() {
         float distSample = linearize_depth(sampleDepth, 0.1, 1000.0);
         float distWorld = linearize_depth(offset.z, 0.1, 1000.0);
         float rangeCheck = smoothstep(0.0, 1.0, radius / (radius * abs(distSample - distWorld)));
-        if (distSample < distWorld) {
-          occluded += rangeCheck * dot(sampleDirection, normal);
-        }
+        //if (distSample < distWorld) {
+          occluded += rangeCheck * dot(sampleDirection, normal) * (distSample < distWorld ? 1.0 : 0.0);
+       // }
 
       }
       float occ = clamp(1.0 - occluded / FSAMPLES, 0.0, 1.0);

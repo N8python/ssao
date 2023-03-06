@@ -135,7 +135,8 @@ async function main() {
         minFilter: THREE.LinearFilter,
         magFilter: THREE.NearestFilter
     });
-    defaultTexture.depthTexture = new THREE.DepthTexture(clientWidth, clientHeight, THREE.FloatType);
+    defaultTexture.depthTexture = new THREE.DepthTexture(clientWidth, clientHeight, THREE.UnsignedIntType);
+    defaultTexture.depthTexture.format = THREE.DepthFormat;
     // Post Effects
     const composer = new EffectComposer(renderer);
     const smaaPass = new SMAAPass(clientWidth, clientHeight);
