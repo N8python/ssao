@@ -34,6 +34,8 @@ const EffectCompositer = {
         highp float z_n = 2.0 * d - 1.0;
         return 2.0 * zNear * zFar / (zFar + zNear - z_n * (zFar - zNear));
     }
+    #include <common>
+    #include <dithering_pars_fragment>
     void main() {
         const float directions = 16.0;
         const float quality = 6.0;
@@ -64,6 +66,7 @@ const EffectCompositer = {
                 gl_FragColor = vec4( vec3(pow(texel.a, intensity)), 1.0);
             }
         }
+        #include <dithering_fragment>
     }
     `
 

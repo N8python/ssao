@@ -101,7 +101,8 @@ const PoissionBlur = {
             float dSample = texture2D(sceneDepth, uv + offset).x;
             float depthSample = linearize_depth(dSample, 0.1, 1000.0);
             vec3 worldPosSample = getWorldPos(dSample, uv + offset);
-            float rangeCheck = exp(-1.0 * 1.0 * abs(depthSample - depth)) * (0.5 + 0.5 * dot(normal, normalSample)) * (1.0 - abs(occSample - baseOcc));
+            float tangentPlaneDist = abs(dot(worldPos - worldPosSample, normal));
+            float rangeCheck = exp(-1.0 * tangentPlaneDist) * (0.5 + 0.5 * dot(normal, normalSample)) * (1.0 - abs(occSample - baseOcc));
             occlusion += occSample * rangeCheck;
             count += rangeCheck;
         }
