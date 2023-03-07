@@ -11,6 +11,7 @@ const EffectCompositer = {
         'viewMatrixInv': { value: new THREE.Matrix4() },
         'cameraPos': { value: new THREE.Vector3() },
         'resolution': { value: new THREE.Vector2() },
+        'blueNoise': { value: null },
         'time': { value: 0.0 },
         'intensity': { value: 10.0 },
         'renderMode': { value: 0.0 },
@@ -25,6 +26,7 @@ const EffectCompositer = {
 		uniform sampler2D sceneDiffuse;
     uniform sampler2D sceneDepth;
     uniform sampler2D tDiffuse;
+    uniform sampler2D blueNoise;
     uniform vec2 resolution;
     uniform float intensity;
     uniform float renderMode;
@@ -43,10 +45,11 @@ const EffectCompositer = {
         float size = 0.0;//1000.0 * (1.0 - texture2D(sceneDepth, vUv).x);
         vec2 radius = vec2(size) / resolution;
         vec4 texel = texture2D(tDiffuse, vUv);//vec3(0.0);
+        float finalAo = pow(texel.a, intensity);
         if (renderMode == 0.0) {
-            gl_FragColor = vec4( texture2D(sceneDiffuse, vUv).rgb * pow(texel.a, intensity), 1.0);
+            gl_FragColor = vec4( texture2D(sceneDiffuse, vUv).rgb *finalAo, 1.0);
         } else if (renderMode == 1.0) {
-            gl_FragColor = vec4( vec3(pow(texel.a, intensity)), 1.0);
+            gl_FragColor = vec4( vec3(finalAo), 1.0);
         } else if (renderMode == 2.0) {
             gl_FragColor = vec4( texture2D(sceneDiffuse, vUv).rgb, 1.0);
         } else if (renderMode == 3.0) {
@@ -55,7 +58,7 @@ const EffectCompositer = {
             } else if (abs(vUv.x - 0.5) < 1.0 / resolution.x) {
                 gl_FragColor = vec4(1.0);
             } else {
-                gl_FragColor = vec4( texture2D(sceneDiffuse, vUv).rgb * pow(texel.a, intensity), 1.0);
+                gl_FragColor = vec4( texture2D(sceneDiffuse, vUv).rgb *finalAo, 1.0);
             }
         } else if (renderMode == 4.0) {
             if (vUv.x < 0.5) {
@@ -63,7 +66,7 @@ const EffectCompositer = {
             } else if (abs(vUv.x - 0.5) < 1.0 / resolution.x) {
                 gl_FragColor = vec4(1.0);
             } else {
-                gl_FragColor = vec4( vec3(pow(texel.a, intensity)), 1.0);
+                gl_FragColor = vec4( vec3(finalAo), 1.0);
             }
         }
         #include <dithering_fragment>

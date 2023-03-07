@@ -107,7 +107,7 @@ const PoissionBlur = {
             count += rangeCheck;
         }
         occlusion /= count;
-        gl_FragColor = vec4(normal, occlusion);
+        gl_FragColor = vec4(0.5 + 0.5 * normal, occlusion);
     }
     `
 

@@ -123,9 +123,12 @@ async function main() {
         const p = {...PoissionBlur };
         p.fragmentShader = p.fragmentShader.replace("16", val);
         blurPass.material.dispose();
+        blurPass2.material.dispose();
         blurPass = new ShaderPass(p);
+        blurPass2 = new ShaderPass(p);
+        blurs = [blurPass, blurPass2];
         composer.passes[1] = blurPass;
-        composer.passes[2] = blurPass;
+        composer.passes[2] = blurPass2;
     });
     gui.add(effectController, "denoiseRadius", 0.0, 24.0, 0.01);
     gui.add(effectController, "aoRadius", 1.0, 10.0, 0.01);
@@ -161,8 +164,10 @@ async function main() {
     const p = {...PoissionBlur }; //.replace("16", effectController.denoiseSamples)
     p.fragmentShader = p.fragmentShader.replace("16", effectController.denoiseSamples);
     let blurPass = new ShaderPass(p);
+    let blurPass2 = new ShaderPass(p);
+    let blurs = [blurPass, blurPass2];
     composer.addPass(blurPass);
-    composer.addPass(blurPass);
+    composer.addPass(blurPass2);
     composer.addPass(effectCompositer);
     composer.addPass(new ShaderPass(GammaCorrectionShader));
     composer.addPass(smaaPass);
@@ -226,18 +231,22 @@ async function main() {
         effectPass.uniforms['bluenoise'].value = bluenoise;
         effectPass.uniforms['radius'].value = effectController.aoRadius;
         effectCompositer.uniforms["resolution"].value = new THREE.Vector2(clientWidth, clientHeight);
+        effectCompositer.uniforms["blueNoise"].value = bluenoise;
         effectCompositer.uniforms["intensity"].value = effectController.intensity;
         effectCompositer.uniforms["renderMode"].value = ["Combined", "AO", "No AO", "Split", "Split AO"].indexOf(effectController.renderMode);
-        blurPass.uniforms["sceneDepth"].value = defaultTexture.depthTexture;
-        blurPass.uniforms["projMat"].value = camera.projectionMatrix;
-        blurPass.uniforms["viewMat"].value = camera.matrixWorldInverse;
-        blurPass.uniforms["projectionMatrixInv"].value = camera.projectionMatrixInverse;
-        blurPass.uniforms["viewMatrixInv"].value = camera.matrixWorld;
-        blurPass.uniforms["cameraPos"].value = camera.position;
-        blurPass.uniforms['resolution'].value = new THREE.Vector2(clientWidth, clientHeight);
-        blurPass.uniforms['time'].value = performance.now() / 1000;
-        blurPass.uniforms['blueNoise'].value = bluenoise;
-        blurPass.uniforms['radius'].value = effectController.denoiseRadius;
+        blurs.forEach((b, i) => {
+            b.uniforms["sceneDepth"].value = defaultTexture.depthTexture;
+            b.uniforms["projMat"].value = camera.projectionMatrix;
+            b.uniforms["viewMat"].value = camera.matrixWorldInverse;
+            b.uniforms["projectionMatrixInv"].value = camera.projectionMatrixInverse;
+            b.uniforms["viewMatrixInv"].value = camera.matrixWorld;
+            b.uniforms["cameraPos"].value = camera.position;
+            b.uniforms['resolution'].value = new THREE.Vector2(clientWidth, clientHeight);
+            b.uniforms['time'].value = performance.now() / 1000;
+            b.uniforms['blueNoise'].value = bluenoise;
+            b.uniforms['radius'].value = effectController.denoiseRadius;
+            b.uniforms['index'].value = i;
+        })
         composer.render();
         controls.update();
         stats.update();
