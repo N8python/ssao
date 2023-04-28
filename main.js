@@ -15,8 +15,9 @@ import { PoissionBlur } from './PoissionBlur.js';
 import { GUI } from 'https://unpkg.com/three@0.142.0/examples/jsm/libs/lil-gui.module.min.js';
 async function main() {
     // Setup basic renderer, controls, and profiler
-    const clientWidth = window.innerWidth * 0.99;
-    const clientHeight = window.innerHeight * 0.98;
+    let clientWidth = window.innerWidth;
+    let clientHeight = window.innerHeight;
+
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(75, clientWidth / clientHeight, 0.1, 1000);
     camera.position.set(50, 75, 50);
@@ -98,28 +99,32 @@ async function main() {
     scene.add(sponza);
     // Build postprocessing stack
     // Render Targets
+    let timeSamples = 0;
+    let runningTime = 0;
     const effectController = {
         aoSamples: 16.0,
-        denoiseSamples: 16.0,
+        denoiseSamples: 4.0,
         denoiseRadius: 12.0,
         aoRadius: 5.0,
-        intensity: 10.0,
+        intensity: 5.0,
         renderMode: "Combined"
     };
     const gui = new GUI();
     gui.add(effectController, "aoSamples", 1.0, 64.0, 1.0).onChange(val => {
+        timeSamples = 0;
         const e = {...EffectShader };
         e.fragmentShader = e.fragmentShader.replace("16", effectController.aoSamples).replace("16.0", effectController.aoSamples + ".0");
         effectPass.material.dispose();
         effectPass = new ShaderPass(e);
         composer.passes[0] = effectPass;
-        samples = getPointsOnSphere(effectController.aoSamples);
+        samples = getPointsOnHemisphere(effectController.aoSamples);
         samplesR = [];
         for (let i = 0; i < effectController.aoSamples; i++) {
             samplesR.push((i + 1) / effectController.aoSamples);
         }
     })
     gui.add(effectController, "denoiseSamples", 1.0, 64.0, 1.0).onChange(val => {
+        timeSamples = 0;
         const p = {...PoissionBlur };
         p.fragmentShader = p.fragmentShader.replace("16", val);
         blurPass.material.dispose();
@@ -130,9 +135,13 @@ async function main() {
         composer.passes[1] = blurPass;
         composer.passes[2] = blurPass2;
     });
-    gui.add(effectController, "denoiseRadius", 0.0, 24.0, 0.01);
-    gui.add(effectController, "aoRadius", 1.0, 10.0, 0.01);
-    gui.add(effectController, "intensity", 0.0, 20.0, 0.01);
+    gui.add(effectController, "denoiseRadius", 0.0, 24.0, 0.01).onChange(val => {
+        timeSamples = 0;
+    });
+    gui.add(effectController, "aoRadius", 1.0, 10.0, 0.01).onChange(val => {
+        timeSamples = 0;
+    });
+    gui.add(effectController, "intensity", 0.0, 10.0, 0.01);
     gui.add(effectController, "renderMode", ["Combined", "AO", "No AO", "Split", "Split AO"]);
     const defaultTexture = new THREE.WebGLRenderTarget(clientWidth, clientHeight, {
         minFilter: THREE.LinearFilter,
@@ -171,20 +180,41 @@ async function main() {
     composer.addPass(effectCompositer);
     composer.addPass(new ShaderPass(GammaCorrectionShader));
     composer.addPass(smaaPass);
+    // Add resize support
+    window.addEventListener("resize", () => {
+        timeSamples = 0;
+        clientWidth = window.innerWidth;
+        clientHeight = window.innerHeight;
+        camera.aspect = clientWidth / clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(clientWidth, clientHeight);
+        composer.setSize(clientWidth, clientHeight);
+        defaultTexture.setSize(clientWidth, clientHeight);
+    });
     // Write a function to get n evenly spaced points on a sphere
-    function getPointsOnSphere(n) {
+
+    function getPointsOnHemisphere(n) {
         const points = [];
-        const inc = Math.PI * (3 - Math.sqrt(5));
-        const off = 2 / n;
         for (let k = 0; k < n; k++) {
-            const y = k * off - 1 + (off / 2);
-            const r = Math.sqrt(1 - y * y);
-            const phi = k * inc;
-            points.push(new THREE.Vector3(Math.cos(phi) * r, y, Math.sin(phi) * r));
+            const theta = 2.399963 * k;
+            const r = (Math.sqrt(k + 0.5) / Math.sqrt(n));
+            const x = r * Math.cos(theta);
+            const y = r * Math.sin(theta);
+            // Project to hemisphere
+            const z = Math.sqrt(1 - (x * x + y * y));
+            points.push(new THREE.Vector3(x, y, z));
+
         }
         return points;
     }
-    let samples = getPointsOnSphere(effectController.aoSamples); //[];
+    let samples = getPointsOnHemisphere(effectController.aoSamples); //[];
+
+    for (let i = 0; i < 16; i++) {
+        const rep = samples[i];
+        const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 32), new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, envMap: environment, metalness: 0.5, roughness: 0.5, color: new THREE.Color(0.0, 1.0, 0.0) }));
+        mesh.position.set(rep.x * 10, rep.z * 10 + 10, rep.y * 10);
+        scene.add(mesh);
+    }
     /*for (let i = 0; i < 16; i++) {
         samples.push(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize());
     }*/
@@ -197,12 +227,39 @@ async function main() {
     bluenoise.wrapT = THREE.RepeatWrapping;
     bluenoise.minFilter = THREE.NearestFilter;
     bluenoise.magFilter = THREE.NearestFilter;
+    const gl = renderer.getContext();
+    const ext = gl.getExtension('EXT_disjoint_timer_query_webgl2');
+
+
+    const timerDOM = document.getElementById("aoTime");
+    effectCompositer.fsQuad._mesh.onAfterRender = () => {
+        gl.endQuery(ext.TIME_ELAPSED_EXT);
+
+    }
+
+    function checkTimerQuery(timerQuery) {
+        const available = gl.getQueryParameter(timerQuery, gl.QUERY_RESULT_AVAILABLE);
+        if (available) {
+            const elapsedTimeInNs = gl.getQueryParameter(timerQuery, gl.QUERY_RESULT);
+            const elapsedTimeInMs = elapsedTimeInNs / 1000000;
+            timeSamples++;
+            const factor = 1.0 / timeSamples;
+            runningTime = runningTime * (1 - factor) + elapsedTimeInMs * factor;
+            timerDOM.innerText = runningTime.toFixed(2);
+        } else {
+            // If the result is not available yet, check again after a delay
+            setTimeout(() => {
+                checkTimerQuery(timerQuery);
+            }, 1);
+        }
+    }
+    const aoMeta = document.getElementById("aoMetadata");
 
     function animate() {
+        aoMeta.innerHTML = `${clientWidth}x${clientHeight}`
         torusKnot.rotation.x += 0.033;
         torusKnot.rotation.y += 0.033;
         renderer.setRenderTarget(defaultTexture);
-        renderer.clear();
         renderer.render(scene, camera);
         /* blurs.forEach(([hblur, vblur], i) => {
              const blurSize = 4.0 ** (i);
@@ -247,7 +304,10 @@ async function main() {
             b.uniforms['radius'].value = effectController.denoiseRadius;
             b.uniforms['index'].value = i;
         })
+        const timerQuery = gl.createQuery();
+        gl.beginQuery(ext.TIME_ELAPSED_EXT, timerQuery);
         composer.render();
+        checkTimerQuery(timerQuery);
         controls.update();
         stats.update();
         requestAnimationFrame(animate);

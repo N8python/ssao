@@ -96,73 +96,6 @@ uniform sampler2D bluenoise;
       }
       return normalize(cross(hVec, vVec));
     }
-  float rand(float n){return fract(sin(n) * 43758.5453123);}
-  float rand(vec2 n) { 
-    return fract(sin(dot(n, vec2(12.9898, 4.1414))) * 43758.5453);
-  }
-  
-float noise(float p){
-float fl = floor(p);
-float fc = fract(p);
-return mix(rand(fl), rand(fl + 1.0), fc);
-}
-
-float noise(vec2 n) {
-const vec2 d = vec2(0.0, 1.0);
-vec2 b = floor(n), f = smoothstep(vec2(0.0), vec2(1.0), fract(n));
-return mix(mix(rand(b), rand(b + d.yx), f.x), mix(rand(b + d.xy), rand(b + d.yy), f.x), f.y);
-}
-
-float seed = 0.0;
-uint hash( uint x ) {
-  x += ( x << 10u );
-  x ^= ( x >>  6u );
-  x += ( x <<  3u );
-  x ^= ( x >> 11u );
-  x += ( x << 15u );
-  return x;
-}
-
-
-
-// Compound versions of the hashing algorithm I whipped together.
-uint hash( uvec2 v ) { return hash( v.x ^ hash(v.y)                         ); }
-uint hash( uvec3 v ) { return hash( v.x ^ hash(v.y) ^ hash(v.z)             ); }
-uint hash( uvec4 v ) { return hash( v.x ^ hash(v.y) ^ hash(v.z) ^ hash(v.w) ); }
-
-
-
-// Construct a float with half-open range [0:1] using low 23 bits.
-// All zeroes yields 0.0, all ones yields the next smallest representable value below 1.0.
-float floatConstruct( uint m ) {
-  const uint ieeeMantissa = 0x007FFFFFu; // binary32 mantissa bitmask
-  const uint ieeeOne      = 0x3F800000u; // 1.0 in IEEE binary32
-
-  m &= ieeeMantissa;                     // Keep only mantissa bits (fractional part)
-  m |= ieeeOne;                          // Add fractional part to 1.0
-
-  float  f = uintBitsToFloat( m );       // Range [1:2]
-  return f - 1.0;                        // Range [0:1]
-}
-
-
-
-// Pseudo-random value in half-open range [0:1].
-float random( float x ) { return floatConstruct(hash(floatBitsToUint(x))); }
-float random( vec2  v ) { return floatConstruct(hash(floatBitsToUint(v))); }
-float random( vec3  v ) { return floatConstruct(hash(floatBitsToUint(v))); }
-float random( vec4  v ) { return floatConstruct(hash(floatBitsToUint(v))); }
-
-float rand()
-{
-/*float result = fract(sin(seed + mod(time, 1000.0) + dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
-//_Seed += 1.0;
-seed += 1.0;
-return result;*/
-float result = random(vec4(gl_FragCoord.xy, seed, time));
-seed += 1.0;
-return result;
-}
 void main() {
       vec4 diffuse = texture2D(sceneDiffuse, vUv);
       float depth = texture2D(sceneDepth, vUv).x;
@@ -173,27 +106,38 @@ void main() {
       vec3 worldPos = getWorldPos(depth, vUv);
       vec3 normal = computeNormal(worldPos, vUv);
       vec4 noise = texture2D(bluenoise, vUv * (resolution / vec2(1024.0, 1024.0)));
+      vec3 randomVec = normalize(noise.rgb * 2.0 - 1.0);
+      vec3 tangent = normalize(randomVec - normal * dot(randomVec, normal));
+      vec3 bitangent = cross(normal, tangent);
+      mat3 tbn = mat3(tangent, bitangent, normal);
       float occluded = 0.0;
+      float totalWeight = 0.0;
       float z = linearize_depth(texture2D(sceneDepth, vUv).x, 0.1, 1000.0);
       for(float i = 0.0; i < FSAMPLES; i++) {
-        vec3 sampleDirection = reflect(samples[int(i)], normalize(noise.rgb));// * sign(dot(normal, samples[int(i)]));
-       sampleDirection *= (dot(normal, sampleDirection) < 0.0 ? -1.0 : 1.0);
+        vec3 sampleDirection = 
+        tbn * 
+        samples[int(i)];
+        ;//reflect(samples[int(i)], randomVec);// * sign(dot(normal, samples[int(i)]));
+      //  sampleDirection *= (dot(normal, sampleDirection) < 0.0 ? -1.0 : 1.0);
 
         float moveAmt = samplesR[int(mod(i + noise.a * FSAMPLES, FSAMPLES))];
         vec3 samplePos = worldPos + radius * moveAmt * sampleDirection;
         vec4 offset = projViewMat * vec4(samplePos, 1.0);
         offset.xyz /= offset.w;
         offset.xyz = offset.xyz * 0.5 + 0.5;
-        float sampleDepth = texture2D(sceneDepth, offset.xy).x;
+        float sampleDepth = textureLod(sceneDepth, offset.xy, 0.0).x;
         float distSample = linearize_depth(sampleDepth, 0.1, 1000.0);
         float distWorld = linearize_depth(offset.z, 0.1, 1000.0);
         float rangeCheck = smoothstep(0.0, 1.0, radius / (radius * abs(distSample - distWorld)));
+        float weight = dot(sampleDirection, normal);
         //if (distSample < distWorld) {
-          occluded += rangeCheck * dot(sampleDirection, normal) * (distSample < distWorld ? 1.0 : 0.0);
+          occluded += rangeCheck * weight /** dot(sampleDirection, normal)*/ * (distSample < distWorld ? 1.0 : 0.0);
+          totalWeight += weight;
+
        // }
 
       }
-      float occ = clamp(1.0 - occluded / FSAMPLES, 0.0, 1.0);
+      float occ = clamp(1.0 - occluded / totalWeight, 0.0, 1.0);
       gl_FragColor = vec4(0.5 + 0.5 * normal, occ);
 }`
 
