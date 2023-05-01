@@ -83,7 +83,7 @@ async function main() {
     sphere.receiveShadow = true;
     //scene.add(sphere);
     const torusKnot = new THREE.Mesh(new THREE.TorusKnotGeometry(5, 1.5, 200, 32), new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, envMap: environment, metalness: 0.5, roughness: 0.5, color: new THREE.Color(0.0, 1.0, 0.0) }));
-    torusKnot.position.y = 8;
+    torusKnot.position.y = 3;
     torusKnot.position.x = 0;
     torusKnot.position.z = 0;
     torusKnot.castShadow = true;
@@ -110,7 +110,7 @@ async function main() {
         renderMode: "Combined"
     };
     const gui = new GUI();
-    gui.add(effectController, "aoSamples", 1.0, 64.0, 1.0).onChange(val => {
+    gui.add(effectController, "aoSamples", 1.0, 256.0, 1.0).onChange(val => {
         timeSamples = 0;
         const e = {...EffectShader };
         e.fragmentShader = e.fragmentShader.replace("16", effectController.aoSamples).replace("16.0", effectController.aoSamples + ".0");
@@ -257,8 +257,8 @@ async function main() {
 
     function animate() {
         aoMeta.innerHTML = `${clientWidth}x${clientHeight}`
-        torusKnot.rotation.x += 0.033;
-        torusKnot.rotation.y += 0.033;
+            //torusKnot.rotation.x += 0.033;
+            // torusKnot.rotation.y += 0.033;
         renderer.setRenderTarget(defaultTexture);
         renderer.render(scene, camera);
         /* blurs.forEach(([hblur, vblur], i) => {

@@ -49,6 +49,10 @@ uniform sampler2D bluenoise;
         highp float z_n = 2.0 * d - 1.0;
         return 2.0 * zNear * zFar / (zFar + zNear - z_n * (zFar - zNear));
     }
+    float linearizeDepth(float depth, float near, float far) {
+      float zLinear = (2.0 * near) / (far + near - depth * (far - near));
+      return zLinear;
+  }
     vec3 getWorldPos(float depth, vec2 coord) {
       float z = depth * 2.0 - 1.0;
       vec4 clipSpacePosition = vec4(coord * 2.0 - 1.0, z, 1.0);
@@ -59,43 +63,32 @@ uniform sampler2D bluenoise;
       return worldSpacePosition.xyz;
   }
   vec3 computeNormal(vec3 worldPos, vec2 vUv) {
-      vec2 downUv = vUv + vec2(0.0, 1.0 / resolution.y);
-      vec3 downPos = getWorldPos( texture2D(sceneDepth, downUv).x, downUv).xyz;
-      vec2 rightUv = vUv + vec2(1.0 / resolution.x, 0.0);
-      vec3 rightPos = getWorldPos(texture2D(sceneDepth, rightUv).x, rightUv).xyz;
-      vec2 upUv = vUv - vec2(0.0, 1.0 / resolution.y);
-      vec3 upPos = getWorldPos(texture2D(sceneDepth, upUv).x, upUv).xyz;
-      vec2 leftUv = vUv - vec2(1.0 / resolution.x, 0.0);;
-      vec3 leftPos = getWorldPos(texture2D(sceneDepth, leftUv).x, leftUv).xyz;
-      int hChoice;
-      int vChoice;
-      if (length(leftPos - worldPos) < length(rightPos - worldPos)) {
-        hChoice = 0;
-      } else {
-        hChoice = 1;
-      }
-      if (length(upPos - worldPos) < length(downPos - worldPos)) {
-        vChoice = 0;
-      } else {
-        vChoice = 1;
-      }
-      vec3 hVec;
-      vec3 vVec;
-      if (hChoice == 0 && vChoice == 0) {
-        hVec = leftPos - worldPos;
-        vVec = upPos - worldPos;
-      } else if (hChoice == 0 && vChoice == 1) {
-        hVec = leftPos - worldPos;
-        vVec = worldPos - downPos;
-      } else if (hChoice == 1 && vChoice == 1) {
-        hVec = rightPos - worldPos;
-        vVec = downPos - worldPos;
-      } else if (hChoice == 1 && vChoice == 0) {
-        hVec = rightPos - worldPos;
-        vVec = worldPos - upPos;
-      }
-      return normalize(cross(hVec, vVec));
-    }
+    ivec2 p = ivec2(vUv * resolution);
+    float c0 = texelFetch(sceneDepth, p, 0).x;
+    float l2 = texelFetch(sceneDepth, p - ivec2(2, 0), 0).x;
+    float l1 = texelFetch(sceneDepth, p - ivec2(1, 0), 0).x;
+    float r1 = texelFetch(sceneDepth, p + ivec2(1, 0), 0).x;
+    float r2 = texelFetch(sceneDepth, p + ivec2(2, 0), 0).x;
+    float b2 = texelFetch(sceneDepth, p - ivec2(0, 2), 0).x;
+    float b1 = texelFetch(sceneDepth, p - ivec2(0, 1), 0).x;
+    float t1 = texelFetch(sceneDepth, p + ivec2(0, 1), 0).x;
+    float t2 = texelFetch(sceneDepth, p + ivec2(0, 2), 0).x;
+
+    float dl = abs((2.0 * l1 - l2) - c0);
+    float dr = abs((2.0 * r1 - r2) - c0);
+    float db = abs((2.0 * b1 - b2) - c0);
+    float dt = abs((2.0 * t1 - t2) - c0);
+
+    vec3 ce = getWorldPos(c0, vUv).xyz;
+
+    vec3 dpdx = (dl < dr) ? ce - getWorldPos(l1, (vUv - vec2(1.0 / resolution.x, 0.0))).xyz
+                          : -ce + getWorldPos(r1, (vUv + vec2(1.0 / resolution.x, 0.0))).xyz;
+    vec3 dpdy = (db < dt) ? ce - getWorldPos(b1, (vUv - vec2(0.0, 1.0 / resolution.y))).xyz
+                          : -ce + getWorldPos(t1, (vUv + vec2(0.0, 1.0 / resolution.y))).xyz;
+
+    return normalize(cross(dpdx, dpdy));
+}
+
 void main() {
       vec4 diffuse = texture2D(sceneDiffuse, vUv);
       float depth = texture2D(sceneDepth, vUv).x;
@@ -131,7 +124,7 @@ void main() {
         float rangeCheck = smoothstep(0.0, 1.0, radius / (radius * abs(distSample - distWorld)));
         float weight = dot(sampleDirection, normal);
         //if (distSample < distWorld) {
-          occluded += rangeCheck * weight /** dot(sampleDirection, normal)*/ * (distSample < distWorld ? 1.0 : 0.0);
+          occluded += rangeCheck * weight * (distSample < distWorld ? 1.0 : 0.0);
           totalWeight += weight;
 
        // }
