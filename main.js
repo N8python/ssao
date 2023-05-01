@@ -110,7 +110,7 @@ async function main() {
         renderMode: "Combined"
     };
     const gui = new GUI();
-    gui.add(effectController, "aoSamples", 1.0, 256.0, 1.0).onChange(val => {
+    gui.add(effectController, "aoSamples", 1.0, 64.0, 1.0).onChange(val => {
         timeSamples = 0;
         const e = {...EffectShader };
         e.fragmentShader = e.fragmentShader.replace("16", effectController.aoSamples).replace("16.0", effectController.aoSamples + ".0");
