@@ -16,6 +16,7 @@ const EffectShader = {
         'samples': { value: [] },
         'samplesR': { value: [] },
         'bluenoise': { value: null },
+        'distanceFalloff': { value: 1.0 },
         'radius': { value: 5.0 }
     },
 
@@ -42,6 +43,7 @@ uniform float time;
 uniform vec3[SAMPLES] samples;
 uniform float[SAMPLES] samplesR;
 uniform float radius;
+uniform float distanceFalloff;
 uniform sampler2D bluenoise;
     varying vec2 vUv;
     highp float linearize_depth(highp float d, highp float zNear,highp float zFar)
@@ -121,7 +123,7 @@ void main() {
         float sampleDepth = textureLod(sceneDepth, offset.xy, 0.0).x;
         float distSample = linearize_depth(sampleDepth, 0.1, 1000.0);
         float distWorld = linearize_depth(offset.z, 0.1, 1000.0);
-        float rangeCheck = smoothstep(0.0, 1.0, radius / (radius * abs(distSample - distWorld)));
+        float rangeCheck = smoothstep(0.0, 1.0, distanceFalloff / (abs(distSample - distWorld)));
         float weight = dot(sampleDirection, normal);
         //if (distSample < distWorld) {
           occluded += rangeCheck * weight * (distSample < distWorld ? 1.0 : 0.0);

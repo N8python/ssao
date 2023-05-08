@@ -103,9 +103,10 @@ async function main() {
     let runningTime = 0;
     const effectController = {
         aoSamples: 16.0,
-        denoiseSamples: 4.0,
+        denoiseSamples: 8.0,
         denoiseRadius: 12.0,
         aoRadius: 5.0,
+        distanceFalloff: 1.0,
         intensity: 5.0,
         renderMode: "Combined"
     };
@@ -142,6 +143,7 @@ async function main() {
     gui.add(effectController, "aoRadius", 1.0, 10.0, 0.01).onChange(val => {
         timeSamples = 0;
     });
+    gui.add(effectController, "distanceFalloff", 0.0, 10.0, 0.01);
     gui.add(effectController, "intensity", 0.0, 10.0, 0.01);
     gui.add(effectController, "renderMode", ["Combined", "AO", "No AO", "Split", "Split AO"]);
     const defaultTexture = new THREE.WebGLRenderTarget(clientWidth, clientHeight, {
@@ -272,6 +274,7 @@ async function main() {
         effectPass.uniforms['samplesR'].value = samplesR;
         effectPass.uniforms['bluenoise'].value = bluenoise;
         effectPass.uniforms['radius'].value = effectController.aoRadius;
+        effectPass.uniforms['distanceFalloff'].value = effectController.distanceFalloff;
         effectCompositer.uniforms["resolution"].value = new THREE.Vector2(clientWidth, clientHeight);
         effectCompositer.uniforms["blueNoise"].value = bluenoise;
         effectCompositer.uniforms["intensity"].value = effectController.intensity;
