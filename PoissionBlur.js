@@ -15,7 +15,8 @@ const PoissionBlur = {
         'r': { value: 5.0 },
         'blueNoise': { value: null },
         'radius': { value: 12.0 },
-        'index': { value: 0.0 }
+        'index': { value: 0.0 },
+        "poissonDisk": { value: [] },
     },
     vertexShader: /* glsl */ `
 		varying vec2 vUv;
@@ -35,6 +36,7 @@ const PoissionBlur = {
     uniform float radius;
     uniform float index;
     varying vec2 vUv;
+
     highp float linearize_depth(highp float d, highp float zNear,highp float zFar)
     {
         highp float z_n = 2.0 * d - 1.0;
@@ -51,9 +53,9 @@ const PoissionBlur = {
     }
     #include <common>
     #define NUM_SAMPLES 16
-    #define NUM_RINGS 11
-    vec2 poissonDisk[NUM_SAMPLES];
-				void initPoissonSamples( ) {
+  //  #define NUM_RINGS 11
+    uniform vec2 poissonDisk[NUM_SAMPLES];
+				/*void initPoissonSamples( ) {
 					float ANGLE_STEP = PI2 * float( NUM_RINGS ) / float( NUM_SAMPLES );
 					float INV_NUM_SAMPLES = 1.0 / float( NUM_SAMPLES );
 
@@ -77,11 +79,11 @@ const PoissionBlur = {
 						radius += radiusStep;
 						angle += ANGLE_STEP;
 					}
-				}
+				}*/
     void main() {
         const float pi = 3.14159;
         //vec3 texel = texture2D(tDiffuse, vUv).rgb;
-        initPoissonSamples();
+       // initPoissonSamples();
         vec2 texelSize = vec2(1.0 / resolution.x, 1.0 / resolution.y);
         vec2 uv = vUv;
         vec4 data = texture2D(tDiffuse, vUv);
@@ -93,8 +95,21 @@ const PoissionBlur = {
         float depth = linearize_depth(d, 0.1, 1000.0);
         vec3 worldPos = getWorldPos(d, vUv);
         float size = radius;
+        float angle;
+        if (index == 0.0) {
+             angle = texture2D(blueNoise, vUv * (resolution / vec2(1024.0))).x * PI2;
+        } else if (index == 1.0) {
+             angle = texture2D(blueNoise, vUv * (resolution / vec2(1024.0))).y * PI2;
+        } else if (index == 2.0) {
+             angle = texture2D(blueNoise, vUv * (resolution / vec2(1024.0))).z * PI2;
+        } else {
+             angle = texture2D(blueNoise, vUv * (resolution / vec2(1024.0))).w * PI2;
+        }
+
+        mat2 rotationMatrix = mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
+        
         for(int i = 0; i < NUM_SAMPLES; i++) {
-            vec2 offset = poissonDisk[i] * texelSize * size;
+            vec2 offset = (rotationMatrix * poissonDisk[i]) * texelSize * size;
             vec4 dataSample = texture2D(tDiffuse, uv + offset);
             float occSample = dataSample.a;
             vec3 normalSample = dataSample.rgb * 2.0 - 1.0;

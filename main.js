@@ -83,7 +83,7 @@ async function main() {
     sphere.receiveShadow = true;
     //scene.add(sphere);
     const torusKnot = new THREE.Mesh(new THREE.TorusKnotGeometry(5, 1.5, 200, 32), new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, envMap: environment, metalness: 0.5, roughness: 0.5, color: new THREE.Color(0.0, 1.0, 0.0) }));
-    torusKnot.position.y = 3;
+    torusKnot.position.y = 8;
     torusKnot.position.x = 0;
     torusKnot.position.z = 0;
     torusKnot.castShadow = true;
@@ -103,7 +103,7 @@ async function main() {
     let runningTime = 0;
     const effectController = {
         aoSamples: 16.0,
-        denoiseSamples: 4.0,
+        denoiseSamples: 8.0,
         denoiseRadius: 12.0,
         aoRadius: 5.0,
         intensity: 5.0,
@@ -134,6 +134,7 @@ async function main() {
         blurs = [blurPass, blurPass2];
         composer.passes[1] = blurPass;
         composer.passes[2] = blurPass2;
+        poissonSamples = getPoissonSamples(effectController.denoiseSamples, 11);
     });
     gui.add(effectController, "denoiseRadius", 0.0, 24.0, 0.01).onChange(val => {
         timeSamples = 0;
@@ -156,20 +157,7 @@ async function main() {
     e.fragmentShader = e.fragmentShader.replace("16", effectController.aoSamples).replace("16.0", effectController.aoSamples + ".0");
     let effectPass = new ShaderPass(e);
     const effectCompositer = new ShaderPass(EffectCompositer);
-    /*const blurs = [];
-    for (let i = 0; i < 3; i++) {
-        const hblur = new ShaderPass(HorizontalBlurShader);
-        const vblur = new ShaderPass(VerticalBlurShader);
-        const blurSize = 1.0;
-        hblur.uniforms.h.value = 2 ** i;
-        vblur.uniforms.v.value = 2 ** i;
-        blurs.push([hblur, vblur]);
-    }*/
     composer.addPass(effectPass);
-    /* for (const [hblur, vblur] of blurs) {
-         composer.addPass(hblur);
-         composer.addPass(vblur)
-     }*/
     const p = {...PoissionBlur }; //.replace("16", effectController.denoiseSamples)
     p.fragmentShader = p.fragmentShader.replace("16", effectController.denoiseSamples);
     let blurPass = new ShaderPass(p);
@@ -207,17 +195,23 @@ async function main() {
         }
         return points;
     }
-    let samples = getPointsOnHemisphere(effectController.aoSamples); //[];
 
-    for (let i = 0; i < 16; i++) {
-        const rep = samples[i];
-        const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 32), new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, envMap: environment, metalness: 0.5, roughness: 0.5, color: new THREE.Color(0.0, 1.0, 0.0) }));
-        mesh.position.set(rep.x * 10, rep.z * 10 + 10, rep.y * 10);
-        scene.add(mesh);
+    function getPoissonSamples(numSamples, numRings) {
+        const angleStep = 2 * Math.PI * numRings / numSamples;
+        const invNumSamples = 1.0 / numSamples;
+        const radiusStep = invNumSamples;
+        const samples = [];
+        let radius = invNumSamples;
+        let angle = 0;
+        for (let i = 0; i < numSamples; i++) {
+            samples.push(new THREE.Vector2(Math.cos(angle), Math.sin(angle)).multiplyScalar(Math.pow(radius, 0.75)));
+            radius += radiusStep;
+            angle += angleStep;
+        }
+        return samples;
     }
-    /*for (let i = 0; i < 16; i++) {
-        samples.push(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize());
-    }*/
+    let samples = getPointsOnHemisphere(effectController.aoSamples); //[];
+    let poissonSamples = getPoissonSamples(effectController.denoiseSamples, 11);
     let samplesR = [];
     for (let i = 0; i < effectController.aoSamples; i++) {
         samplesR.push((i + 1) / effectController.aoSamples);
@@ -257,19 +251,10 @@ async function main() {
 
     function animate() {
         aoMeta.innerHTML = `${clientWidth}x${clientHeight}`
-            //torusKnot.rotation.x += 0.033;
-            // torusKnot.rotation.y += 0.033;
+        torusKnot.rotation.x += 0.033;
+        torusKnot.rotation.y += 0.033;
         renderer.setRenderTarget(defaultTexture);
         renderer.render(scene, camera);
-        /* blurs.forEach(([hblur, vblur], i) => {
-             const blurSize = 4.0 ** (i);
-             hblur.uniforms["sceneDepth"].value = defaultTexture.depthTexture;
-             hblur.uniforms["resolution"].value = new THREE.Vector2(clientWidth, clientHeight);
-             vblur.uniforms["sceneDepth"].value = defaultTexture.depthTexture;
-             vblur.uniforms["resolution"].value = new THREE.Vector2(clientWidth, clientHeight);
-             hblur.uniforms.h.value = blurSize;
-             vblur.uniforms.v.value = blurSize;
-         });*/
         effectCompositer.uniforms["sceneDiffuse"].value = defaultTexture.texture;
         effectCompositer.uniforms["sceneDepth"].value = defaultTexture.depthTexture;
         effectPass.uniforms["sceneDiffuse"].value = defaultTexture.texture;
@@ -303,6 +288,7 @@ async function main() {
             b.uniforms['blueNoise'].value = bluenoise;
             b.uniforms['radius'].value = effectController.denoiseRadius;
             b.uniforms['index'].value = i;
+            b.uniforms['poissonDisk'].value = poissonSamples;
         })
         const timerQuery = gl.createQuery();
         gl.beginQuery(ext.TIME_ELAPSED_EXT, timerQuery);
