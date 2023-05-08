@@ -103,7 +103,7 @@ async function main() {
     let runningTime = 0;
     const effectController = {
         aoSamples: 16.0,
-        denoiseSamples: 8.0,
+        denoiseSamples: 4.0,
         denoiseRadius: 12.0,
         aoRadius: 5.0,
         intensity: 5.0,
